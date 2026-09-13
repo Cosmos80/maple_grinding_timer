@@ -148,6 +148,11 @@
     cursor: not-allowed;
   }
 
+  input:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
   #startBtn {
     background: #4f8ef7;
   }
@@ -197,7 +202,7 @@
   <div class="buttons">
     <button id="startBtn">실행</button>
     <button id="restartBtn">다시시작</button>
-    <button id="pauseBtn">일시정지</button>
+    <button id="pauseBtn" disabled>일시정지</button>
     <button id="resetBtn">리셋</button>
   </div>
 
@@ -227,6 +232,7 @@
   let alarmId = null;
   let alarmCountdownId = null;
   let alarmRemaining = null;
+  let isPaused = false;
   let audioCtx = null;
   let mp3Source = null;
   let mp3Gain = null;
@@ -363,8 +369,18 @@
     updateDisplay();
   }
 
-  function handleStart() {
-    stopAlarm();
+  function setPauseUiState(paused) {
+    isPaused = paused;
+    pauseBtn.textContent = paused ? '일시정지 해제' : '일시정지';
+  }
+
+  function setControlsDisabled(disabled) {
+    periodInput.disabled = disabled;
+    continuousToggle.disabled = disabled;
+    alarmDurationInput.disabled = disabled;
+  }
+
+  function beginCountdown() {
     if (remaining === null || remaining <= 0) {
       const period = parseInt(periodInput.value, 10);
       remaining = (Number.isFinite(period) && period > 0) ? period : DEFAULT_PERIOD;
@@ -373,6 +389,15 @@
     if (countdownId === null) {
       countdownId = setInterval(tick, 1000);
     }
+  }
+
+  function handleStart() {
+    stopAlarm();
+    beginCountdown();
+    startBtn.disabled = true;
+    pauseBtn.disabled = false;
+    setPauseUiState(false);
+    setControlsDisabled(true);
   }
 
   function handleRestart() {
@@ -385,14 +410,25 @@
     remaining = (Number.isFinite(period) && period > 0) ? period : DEFAULT_PERIOD;
     updateDisplay();
     countdownId = setInterval(tick, 1000);
+    startBtn.disabled = true;
+    pauseBtn.disabled = false;
+    setPauseUiState(false);
+    setControlsDisabled(true);
   }
 
-  function handlePause() {
-    if (countdownId !== null) {
-      clearInterval(countdownId);
-      countdownId = null;
+  function handlePauseToggle() {
+    if (!isPaused) {
+      if (countdownId !== null) {
+        clearInterval(countdownId);
+        countdownId = null;
+      }
+      stopAlarm();
+      setPauseUiState(true);
+    } else {
+      stopAlarm();
+      beginCountdown();
+      setPauseUiState(false);
     }
-    stopAlarm();
   }
 
   function handleReset() {
@@ -407,6 +443,10 @@
     durationRow.style.display = 'none';
     alarmDurationInput.value = DEFAULT_ALARM_DURATION;
     updateDisplay();
+    startBtn.disabled = false;
+    pauseBtn.disabled = true;
+    setPauseUiState(false);
+    setControlsDisabled(false);
   }
 
   continuousToggle.addEventListener('change', () => {
@@ -423,7 +463,7 @@
 
   startBtn.addEventListener('click', handleStart);
   restartBtn.addEventListener('click', handleRestart);
-  pauseBtn.addEventListener('click', handlePause);
+  pauseBtn.addEventListener('click', handlePauseToggle);
   resetBtn.addEventListener('click', handleReset);
 
   updateDisplay();
