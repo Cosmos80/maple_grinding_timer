@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maple Grinding Timer</title>
+<style>
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    background-color: #1a1b1e;
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
+    color: #d4d6dc;
+  }
+
+  .container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+    padding: 40px;
+  }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #e8eaf0;
+    margin: 0;
+  }
+
+  .display {
+    font-size: 120px;
+    font-weight: 700;
+    color: #ffffff;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 4px;
+  }
+
+  .period-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 16px;
+  }
+
+  .period-row input {
+    width: 90px;
+    font-size: 18px;
+    text-align: center;
+    background: #2a2d3e;
+    color: #e8eaf0;
+    border: 1px solid #3a3d4a;
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+
+  .period-row input:focus {
+    outline: none;
+    border-color: #4f8ef7;
+  }
+
+  .volume-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 16px;
+  }
+
+  .volume-row input[type="range"] {
+    width: 140px;
+    accent-color: #4f8ef7;
+  }
+
+  .volume-row span {
+    width: 36px;
+    text-align: right;
+    color: #a5b4fc;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .buttons {
+    display: flex;
+    gap: 16px;
+  }
+
+  button {
+    font-size: 16px;
+    font-weight: 700;
+    padding: 12px 28px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #fff;
+  }
+
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  #startBtn {
+    background: #4f8ef7;
+  }
+
+  #restartBtn {
+    background: #4f8ef7;
+  }
+
+  #pauseBtn {
+    background: #3a3d4a;
+  }
+
+  #resetBtn {
+    background: #3a3d4a;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Maple Grinding Timer</h1>
+
+  <div class="display" id="display">00:00</div>
+
+  <div class="period-row">
+    <label for="periodInput">주기(초)</label>
+    <input type="number" id="periodInput" value="55" min="1" step="1">
+  </div>
+
+  <div class="volume-row">
+    <label for="volumeInput">알림 볼륨</label>
+    <input type="range" id="volumeInput" min="0" max="200" value="90">
+    <span id="volumeValue">90%</span>
+  </div>
+
+  <div class="buttons">
+    <button id="startBtn">실행</button>
+    <button id="restartBtn">다시시작</button>
+    <button id="pauseBtn">일시정지</button>
+    <button id="resetBtn">리셋</button>
+  </div>
+
+  <audio id="alarmAudio" src="universfield-ringtone-065-496263.mp3" preload="auto" loop></audio>
+</div>
+
+<script>
+  const DEFAULT_PERIOD = 55;
+
+  const display = document.getElementById('display');
+  const periodInput = document.getElementById('periodInput');
+  const startBtn = document.getElementById('startBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const volumeInput = document.getElementById('volumeInput');
+  const volumeValue = document.getElementById('volumeValue');
+  const alarmAudio = document.getElementById('alarmAudio');
+
+  let remaining = null;
+  let countdownId = null;
+  let alarmId = null;
+  let audioCtx = null;
+  let mp3Source = null;
+  let mp3Gain = null;
+  let alarmVolume = volumeInput.value / 100;
+  let mp3Available = true;
+
+  alarmAudio.volume = 1;
+  alarmAudio.addEventListener('error', () => {
+    mp3Available = false;
+  });
+
+  function formatTime(seconds) {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+    return m + ':' + s;
+  }
+
+  function updateDisplay() {
+    display.textContent = formatTime(remaining ?? 0);
+  }
+
+  function ensureAudioCtx() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return audioCtx;
+  }
+
+  function ensureMp3Graph() {
+    ensureAudioCtx();
+    if (!mp3Source) {
+      mp3Source = audioCtx.createMediaElementSource(alarmAudio);
+      mp3Gain = audioCtx.createGain();
+      mp3Gain.gain.value = alarmVolume;
+      mp3Source.connect(mp3Gain);
+      mp3Gain.connect(audioCtx.destination);
+    }
+  }
+
+  function beep() {
+    ensureAudioCtx();
+    const now = audioCtx.currentTime;
+    const oscillator = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    oscillator.type = 'square';
+    oscillator.frequency.value = 660;
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(Math.min(Math.max(alarmVolume, 0.0001), 1), now + 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+    oscillator.connect(gain);
+    gain.connect(audioCtx.destination);
+    oscillator.start(now);
+    oscillator.stop(now + 0.5);
+  }
+
+  function startBeepFallback() {
+    beep();
+    alarmId = setInterval(beep, 800);
+  }
+
+  function startAlarm() {
+    if (!mp3Available) {
+      startBeepFallback();
+      return;
+    }
+    try {
+      ensureMp3Graph();
+      mp3Gain.gain.value = alarmVolume;
+      alarmAudio.currentTime = 0;
+      const playPromise = alarmAudio.play();
+      if (playPromise) {
+        playPromise.catch((err) => {
+          console.error('mp3 play failed, falling back to beep:', err);
+          mp3Available = false;
+          startBeepFallback();
+        });
+      }
+    } catch (err) {
+      console.error('mp3 setup failed, falling back to beep:', err);
+      mp3Available = false;
+      startBeepFallback();
+    }
+  }
+
+  function stopAlarm() {
+    alarmAudio.pause();
+    alarmAudio.currentTime = 0;
+    if (alarmId !== null) {
+      clearInterval(alarmId);
+      alarmId = null;
+    }
+  }
+
+  function tick() {
+    remaining -= 1;
+    if (remaining <= 0) {
+      remaining = 0;
+      clearInterval(countdownId);
+      countdownId = null;
+      startAlarm();
+    }
+    updateDisplay();
+  }
+
+  function handleStart() {
+    stopAlarm();
+    if (remaining === null || remaining <= 0) {
+      const period = parseInt(periodInput.value, 10);
+      remaining = (Number.isFinite(period) && period > 0) ? period : DEFAULT_PERIOD;
+      updateDisplay();
+    }
+    if (countdownId === null) {
+      countdownId = setInterval(tick, 1000);
+    }
+  }
+
+  function handleRestart() {
+    stopAlarm();
+    if (countdownId !== null) {
+      clearInterval(countdownId);
+      countdownId = null;
+    }
+    const period = parseInt(periodInput.value, 10);
+    remaining = (Number.isFinite(period) && period > 0) ? period : DEFAULT_PERIOD;
+    updateDisplay();
+    countdownId = setInterval(tick, 1000);
+  }
+
+  function handlePause() {
+    if (countdownId !== null) {
+      clearInterval(countdownId);
+      countdownId = null;
+    }
+    stopAlarm();
+  }
+
+  function handleReset() {
+    if (countdownId !== null) {
+      clearInterval(countdownId);
+      countdownId = null;
+    }
+    stopAlarm();
+    remaining = null;
+    periodInput.value = DEFAULT_PERIOD;
+    updateDisplay();
+  }
+
+  volumeInput.addEventListener('input', () => {
+    alarmVolume = volumeInput.value / 100;
+    volumeValue.textContent = volumeInput.value + '%';
+    if (mp3Gain) {
+      mp3Gain.gain.value = alarmVolume;
+    }
+  });
+
+  startBtn.addEventListener('click', handleStart);
+  restartBtn.addEventListener('click', handleRestart);
+  pauseBtn.addEventListener('click', handlePause);
+  resetBtn.addEventListener('click', handleReset);
+
+  updateDisplay();
+</script>
+
+</body>
+</html>
