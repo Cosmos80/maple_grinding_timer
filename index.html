@@ -168,6 +168,60 @@
   #resetBtn {
     background: #3a3d4a;
   }
+
+  .presets {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .presets-label {
+    font-size: 14px;
+    color: #8b8fa3;
+  }
+
+  .preset-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 340px;
+  }
+
+  .preset-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    font-size: 14px;
+    font-family: inherit;
+    padding: 12px 16px;
+    border: 1px solid #3a3d4a;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #d4d6dc;
+    background: #2a2d3e;
+    text-align: left;
+  }
+
+  .preset-row:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .preset-name {
+    font-weight: 700;
+    color: #e8eaf0;
+    white-space: nowrap;
+  }
+
+  .preset-settings {
+    color: #a5b4fc;
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+    text-align: right;
+  }
 </style>
 </head>
 <body>
@@ -206,6 +260,20 @@
     <button id="resetBtn">리셋</button>
   </div>
 
+  <div class="presets">
+    <div class="presets-label">프리셋</div>
+    <div class="preset-list">
+      <button id="presetSoksaBtn" class="preset-row">
+        <span class="preset-name">속사기</span>
+        <span class="preset-settings" id="presetSoksaSummary"></span>
+      </button>
+      <button id="presetLateBtn" class="preset-row">
+        <span class="preset-name">레테</span>
+        <span class="preset-settings" id="presetLateSummary"></span>
+      </button>
+    </div>
+  </div>
+
   <audio id="alarmAudio" src="universfield-ringtone-065-496263.mp3" preload="auto" loop></audio>
 </div>
 
@@ -226,6 +294,21 @@
   const volumeInput = document.getElementById('volumeInput');
   const volumeValue = document.getElementById('volumeValue');
   const alarmAudio = document.getElementById('alarmAudio');
+  const presetSoksaBtn = document.getElementById('presetSoksaBtn');
+  const presetLateBtn = document.getElementById('presetLateBtn');
+  const presetButtons = [presetSoksaBtn, presetLateBtn];
+
+  const PRESETS = {
+    soksa: { period: 40, continuous: true, alarmDuration: 3, volume: 40 },
+    late: { period: 60, continuous: true, alarmDuration: 3, volume: 40 },
+  };
+
+  function formatPresetSummary(preset) {
+    return `${preset.period}초 · 연속모드 ${preset.continuous ? 'on' : 'off'} · 유지 ${preset.alarmDuration}초 · 볼륨 ${preset.volume}%`;
+  }
+
+  document.getElementById('presetSoksaSummary').textContent = formatPresetSummary(PRESETS.soksa);
+  document.getElementById('presetLateSummary').textContent = formatPresetSummary(PRESETS.late);
 
   let remaining = null;
   let countdownId = null;
@@ -378,6 +461,16 @@
     periodInput.disabled = disabled;
     continuousToggle.disabled = disabled;
     alarmDurationInput.disabled = disabled;
+    presetButtons.forEach((btn) => { btn.disabled = disabled; });
+  }
+
+  function applyPreset(preset) {
+    periodInput.value = preset.period;
+    continuousToggle.checked = preset.continuous;
+    durationRow.style.display = preset.continuous ? 'flex' : 'none';
+    alarmDurationInput.value = preset.alarmDuration;
+    volumeInput.value = preset.volume;
+    volumeInput.dispatchEvent(new Event('input'));
   }
 
   function beginCountdown() {
@@ -465,6 +558,8 @@
   restartBtn.addEventListener('click', handleRestart);
   pauseBtn.addEventListener('click', handlePauseToggle);
   resetBtn.addEventListener('click', handleReset);
+  presetSoksaBtn.addEventListener('click', () => applyPreset(PRESETS.soksa));
+  presetLateBtn.addEventListener('click', () => applyPreset(PRESETS.late));
 
   updateDisplay();
 </script>
